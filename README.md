@@ -1,6 +1,6 @@
 # SBM-U 2.0 ODF++ 저비용 정화조 모니터링 시스템
 
-이 프로젝트는 Arduino 기반의 정화조 모니터링 시스템으로, 초음파 거리 센서, 탁도 센서, TDS 센서, 그리고 온도 센서를 이용해 정화조 상태를 실시간으로 측정합니다.
+Arduino 기반의 정화조 모니터링 시스템으로, 초음파 거리 센서, 탁도 센서, TDS 센서, 그리고 온도 센서를 이용해 정화조 상태를 실시간으로 측정
 
 ## 기능
 
@@ -45,6 +45,20 @@
 2. `OneWire.h` 및 `DallasTemperature.h` 라이브러리를 설치
 3. `stemun.ino`를 Arduino IDE에서 열기
 4. 코드 업로드 후 시리얼 모니터(`9600`bps)로 데이터 확인
+
+## HTML UI 연결
+
+- `index.html` 파일을 열어 웹 UI로 데이터를 확인할 수 있습니다.
+- Web Serial API를 이용해 Arduino의 시리얼 데이터를 브라우저에서 직접 읽습니다.
+- Chrome/Edge 계열 브라우저에서 `localhost` 또는 `HTTPS` 환경에서 실행해야 합니다.
+- VS Code의 Live Server 확장이나 간단한 로컬 서버를 사용하면 편리합니다.
+
+### 실행 방법 예시
+
+1. VS Code에서 `index.html` 열기
+2. Live Server로 실행하거나, 터미널에서 `python3 -m http.server 8000` 실행
+3. 브라우저에서 `http://localhost:8000` 접속
+4. `시리얼 연결` 버튼을 눌러 Arduino 포트를 선택
 
 ## 참고
 

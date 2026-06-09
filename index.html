@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>정화조 모니터링 UI</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #eef2f7;
+      margin: 0;
+      padding: 20px;
+      color: #222;
+    }
+    h1 {
+      margin-top: 0;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .button {
+      display: inline-block;
+      background: #2f80ed;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 18px;
+      cursor: pointer;
+      font-size: 15px;
+    }
+    .button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .status {
+      font-size: 22px;
+      font-weight: bold;
+      margin-top: 12px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+    }
+    .value {
+      font-size: 1.2rem;
+      margin-top: 8px;
+    }
+    .label {
+      color: #666;
+      font-size: 0.95rem;
+    }
+    pre {
+      background: #f4f7fb;
+      padding: 12px;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>정화조 모니터링 UI</h1>
+    <div class="card">
+      <button id="connectButton" class="button">시리얼 연결</button>
+      <span id="connectedStatus" style="margin-left: 12px; color: #444;">연결되지 않음</span>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <div class="label">채움률</div>
+          <div id="fillLevel" class="value">-</div>
+        </div>
+        <div>
+          <div class="label">탁도 점수</div>
+          <div id="turbidityScore" class="value">-</div>
+        </div>
+        <div>
+          <div class="label">TDS raw</div>
+          <div id="tdsRaw" class="value">-</div>
+        </div>
+        <div>
+          <div class="label">TDS 점수</div>
+          <div id="tdsScore" class="value">-</div>
+        </div>
+      </div>
+      <div class="row" style="margin-top: 16px;">
+        <div>
+          <div class="label">수온</div>
+          <div id="temperature" class="value">-</div>
+        </div>
+        <div style="grid-column: span 2;">
+          <div class="label">수거 필요도</div>
+          <div id="finalScore" class="value">-</div>
+        </div>
+        <div>
+          <div class="label">상태</div>
+          <div id="currentStatus" class="value status">-</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">수신 로그</div>
+      <pre id="log">시리얼 연결 후 데이터가 표시됩니다.</pre>
+    </div>
+  </div>
+
+  <script>
+    const connectButton = document.getElementById('connectButton');
+    const connectedStatus = document.getElementById('connectedStatus');
+    const logOutput = document.getElementById('log');
+    const fillLevelEl = document.getElementById('fillLevel');
+    const turbidityScoreEl = document.getElementById('turbidityScore');
+    const tdsRawEl = document.getElementById('tdsRaw');
+    const tdsScoreEl = document.getElementById('tdsScore');
+    const temperatureEl = document.getElementById('temperature');
+    const finalScoreEl = document.getElementById('finalScore');
+    const statusEl = document.getElementById('currentStatus');
+
+    let port;
+    let reader;
+
+    class LineBreakTransformer {
+      constructor() {
+        this.chunks = '';
+      }
+      transform(chunk, controller) {
+        this.chunks += chunk;
+        const lines = this.chunks.split('\n');
+        this.chunks = lines.pop();
+        lines.forEach(line => controller.enqueue(line));
+      }
+      flush(controller) {
+        controller.enqueue(this.chunks);
+      }
+    }
+
+    function getTextValue(label, text, suffix = '') {
+      const idx = text.indexOf(label);
+      if (idx < 0) return '';
+      let value = text.slice(idx + label.length).trim();
+      if (suffix && value.endsWith(suffix)) {
+        value = value.slice(0, -suffix.length).trim();
+      }
+      return value;
+    }
+
+    function parseLine(line) {
+      if (!line || line.length < 5) return;
+      logOutput.textContent = line;
+
+      fillLevelEl.textContent = getTextValue('[채움률]:', line, '%') || '-';
+      turbidityScoreEl.textContent = getTextValue('[탁도점수]:', line) || '-';
+      tdsRawEl.textContent = getTextValue('[TDS생값]:', line) || '-';
+      tdsScoreEl.textContent = getTextValue('[TDS점수]:', line) || '-';
+      temperatureEl.textContent = getTextValue('[수온]:', line, '°C') || '-';
+      finalScoreEl.textContent = getTextValue('[수거 필요도]:', line) || '-';
+
+      const statusPart = line.split('->').pop().trim();
+      statusEl.textContent = statusPart || '-';
+    }
+
+    async function connectSerial() {
+      try {
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 9600 });
+        connectButton.disabled = true;
+        connectedStatus.textContent = '연결됨';
+        connectedStatus.style.color = '#1a8917';
+
+        const decoder = new TextDecoderStream();
+        const inputDone = port.readable.pipeTo(decoder.writable);
+        reader = decoder.readable
+          .pipeThrough(new TransformStream(new LineBreakTransformer()))
+          .getReader();
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          parseLine(value);
+        }
+      } catch (error) {
+        console.error(error);
+        connectedStatus.textContent = '연결 실패';
+        connectedStatus.style.color = '#c0392b';
+      }
+    }
+
+    connectButton.addEventListener('click', connectSerial);
+  </script>
+</body>
+</html>
